@@ -20,19 +20,16 @@ async function scrapeListing(page, url) {
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000); 
     
-    const ratingElement = await page.$('span:has-text("reviews")');
-    if (!ratingElement) {
-      console.log('Could not find rating element on ' + url);
-      return null;
-    }
-
-    const text = await ratingElement.innerText();
-    const match = text.match(/([\d\.]+)\s*·\s*([\d,]+)\s*reviews/i);
+    const text = await page.evaluate(() => document.body.innerText);
     
-    if (match) {
+    // Look for various formats of rating and reviews in the page text
+    const ratingMatch = text.match(/Rated ([\d\.]+) out of 5 stars/i) || text.match(/([\d\.]+)\n*·\n*\d+\s*reviews/i);
+    const reviewsMatch = text.match(/([\d,]+)\s*reviews/i);
+    
+    if (ratingMatch || reviewsMatch) {
       return {
-        rating: match[1],
-        reviews_count: match[2].replace(',', '')
+        rating: ratingMatch ? ratingMatch[1] : 'New',
+        reviews_count: reviewsMatch ? reviewsMatch[1].replace(',', '') : '0'
       };
     }
   } catch (error) {
