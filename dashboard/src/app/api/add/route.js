@@ -2,53 +2,62 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const githubToken = process.env.GITHUB_TOKEN; // Needed to trigger the action
 
 export async function POST(request) {
   try {
     const { url, name } = await request.json();
 
     if (!url || !url.includes('airbnb.com')) {
-      return new Response('Invalid Airbnb URL', { status: 400 });
+      return new Response(JSON.stringify({ error: 'Invalid Airbnb URL' }), { status: 400 });
     }
 
+    // 1. Instantly Scrape Airbnb
+    let rating = '0.00';
+    let reviews_count = '0';
+    
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9'
+        }
+      });
+      const html = await res.text();
+      
+      const ratingMatch = html.match(/Rated ([\d\.]+) out of 5 stars/i) || html.match(/([\d\.]+)\s*out of 5 stars/i);
+      const reviewsMatch = html.match(/([\d,]+)\s*reviews/i);
+      
+      if (ratingMatch) rating = ratingMatch[1];
+      if (reviewsMatch) reviews_count = reviewsMatch[1].replace(',', '');
+    } catch (scrapeErr) {
+      console.error("Direct fetch failed:", scrapeErr);
+    }
+
+    // 2. Update Supabase
     if (supabaseUrl && supabaseKey) {
       const supabase = createClient(supabaseUrl, supabaseKey);
       
-      // Insert the URL into the database (ignore error if it already exists because it's marked UNIQUE)
+      // Upsert by airbnb_url
       const { error } = await supabase
         .from('listings')
-        .insert([{ airbnb_url: url, property_name: name || 'Unknown' }])
-        .select();
+        .upsert(
+          { airbnb_url: url, property_name: name || 'Unknown', rating, reviews_count, last_scraped_at: new Date() },
+          { onConflict: 'airbnb_url' }
+        );
         
-      if (error && error.code !== '23505') { // 23505 is unique violation (already exists)
-        console.error("Supabase insert error:", error.message);
-      }
-    }
-
-    // Trigger the GitHub Action Scraper
-    if (githubToken) {
-      const githubRes = await fetch('https://api.github.com/repos/AMTGN/airbnb-widget-v2/actions/workflows/scraper.yml/dispatches', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'Authorization': `token ${githubToken}`,
-          'User-Agent': 'Airbnb-Widget-App'
-        },
-        body: JSON.stringify({ ref: 'main' })
-      });
-
-      if (!githubRes.ok) {
-        console.error("Failed to trigger GitHub Action:", await githubRes.text());
+      if (error) {
+        console.error("Supabase upsert error:", error.message);
       }
     } else {
-      console.log("No GITHUB_TOKEN provided, skipping scraper trigger.");
+      console.error("Missing Supabase credentials in Vercel.");
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    // 3. Return Instant Success
+    return new Response(JSON.stringify({ success: true, rating, reviews_count }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }

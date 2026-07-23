@@ -30,19 +30,18 @@ export default function Home() {
     updateRow(index, 'loading', true);
     
     try {
-      // This tells the backend to save the URL and trigger the scraper!
+      // This tells the backend to instantly scrape the URL and save it to Supabase!
       await fetch('/api/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: row.url, name: row.name })
       });
       
-      // Wait for a few seconds to let the cloud scraper run before turning off the loading indicator
-      setTimeout(() => {
-        updateRow(index, 'loading', false);
-        // Force iframe refresh by tweaking its source slightly (if you want to force reload)
-        // For simplicity, we just rely on standard loading. 
-      }, 5000);
+      // Because V3 is instant, we don't need a timeout! Turn off loading immediately.
+      updateRow(index, 'loading', false);
+      
+      // Force iframe refresh by adding a cache-busting timestamp
+      updateRow(index, 'timestamp', Date.now());
       
     } catch (e) {
       console.error(e);
@@ -58,8 +57,8 @@ export default function Home() {
 
   return (
     <main style={{ padding: '40px', fontFamily: 'sans-serif', background: '#f7f7f7', minHeight: '100vh' }}>
-      <h1 style={{ color: '#FF5A5F' }}>Airbnb Widget Manager (V2)</h1>
-      <p>Enter your Airbnb URLs below. They will instantly trigger the cloud scraper to fetch the latest data.</p>
+      <h1 style={{ color: '#FF5A5F' }}>Airbnb Widget Manager (V3)</h1>
+      <p>Enter your Airbnb URLs below. They will instantly fetch the latest rating data without delays.</p>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
         {rows.map((row, i) => (
@@ -106,7 +105,7 @@ export default function Home() {
             </div>
             <div style={{ flex: 1, border: '1px dashed #ccc', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '120px', background: '#fafafa', position: 'relative', overflow: 'hidden' }}>
               {row.url ? (
-                <iframe src={`${origin}/api/widget?url=${encodeURIComponent(row.url)}`} width="100%" height="100%" frameBorder="0" scrolling="no" style={{ position: 'absolute', top: 0, left: 0 }}></iframe>
+                <iframe src={`${origin}/api/widget?url=${encodeURIComponent(row.url)}${row.timestamp ? '&t='+row.timestamp : ''}`} width="100%" height="100%" frameBorder="0" scrolling="no" style={{ position: 'absolute', top: 0, left: 0 }}></iframe>
               ) : (
                 <span style={{ color: '#999', fontSize: '14px' }}>Preview...</span>
               )}
