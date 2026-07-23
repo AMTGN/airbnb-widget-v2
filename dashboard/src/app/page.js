@@ -1,14 +1,47 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { createClient } from '@/utils/supabase/client';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
-  const [rows, setRows] = useState(Array(10).fill({ name: '', url: '', loading: false }));
+  const [rows, setRows] = useState([]);
   const [origin, setOrigin] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     setOrigin(window.location.origin);
-  }, []);
+    
+    async function loadUserAndData() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email);
+        
+        // Fetch user's existing listings
+        const { data: listings } = await supabase
+          .from('listings')
+          .select('property_name, airbnb_url')
+          .eq('user_id', user.id);
+          
+        let loadedRows = [];
+        if (listings && listings.length > 0) {
+          loadedRows = listings.map(l => ({ name: l.property_name, url: l.airbnb_url, loading: false }));
+        }
+        
+        // Pad the array to exactly 10 rows
+        while (loadedRows.length < 10) {
+          loadedRows.push({ name: '', url: '', loading: false });
+        }
+        
+        // If somehow they have more than 10, slice it (should be impossible via API limit)
+        setRows(loadedRows.slice(0, 10));
+      }
+    }
+    
+    loadUserAndData();
+  }, [supabase]);
 
   const copyCode = (index) => {
     const code = getIframeCode(rows[index].url);
@@ -30,23 +63,32 @@ export default function Home() {
     updateRow(index, 'loading', true);
     
     try {
-      // This tells the backend to instantly scrape the URL and save it to Supabase!
-      await fetch('/api/add', {
+      const res = await fetch('/api/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: row.url, name: row.name })
       });
       
-      // Because V3 is instant, we don't need a timeout! Turn off loading immediately.
-      updateRow(index, 'loading', false);
+      if (!res.ok) {
+        const errorData = await res.json();
+        alert(errorData.error || 'An error occurred');
+        updateRow(index, 'loading', false);
+        return;
+      }
       
-      // Force iframe refresh by adding a cache-busting timestamp
+      updateRow(index, 'loading', false);
       updateRow(index, 'timestamp', Date.now());
       
     } catch (e) {
       console.error(e);
+      alert('Failed to contact server');
       updateRow(index, 'loading', false);
     }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
   };
 
   const getIframeCode = (url) => {
@@ -55,10 +97,24 @@ export default function Home() {
     return `<iframe src="${widgetUrl}" width="300" height="150" frameborder="0" scrolling="no"></iframe>`;
   };
 
+  if (rows.length === 0) {
+    return <div style={{ padding: '40px', fontFamily: 'sans-serif' }}>Loading dashboard...</div>;
+  }
+
   return (
     <main style={{ padding: '40px', fontFamily: 'sans-serif', background: '#f7f7f7', minHeight: '100vh' }}>
-      <h1 style={{ color: '#FF5A5F' }}>Airbnb Widget Manager (V3)</h1>
-      <p>Enter your Airbnb URLs below. They will instantly fetch the latest rating data without delays.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ color: '#FF5A5F', margin: 0 }}>Airbnb Widget Manager</h1>
+          <p style={{ margin: '5px 0 0 0', color: '#666' }}>Logged in as {userEmail} (Limit: 10 listings)</p>
+        </div>
+        <button 
+          onClick={handleSignOut}
+          style={{ padding: '10px 15px', background: '#e0e0e0', color: '#333', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+        >
+          Sign Out
+        </button>
+      </div>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
         {rows.map((row, i) => (
@@ -82,7 +138,8 @@ export default function Home() {
                 />
                 <button 
                   onClick={() => handleUrlSubmit(i)}
-                  style={{ padding: '10px 15px', background: '#FF5A5F', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  disabled={row.loading}
+                  style={{ padding: '10px 15px', background: row.loading ? '#ccc' : '#FF5A5F', color: 'white', border: 'none', borderRadius: '4px', cursor: row.loading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
                 >
                   {row.loading ? 'Scraping...' : 'Generate Widget'}
                 </button>

@@ -1,14 +1,38 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+import { createClient } from '@/utils/supabase/server';
 
 export async function POST(request) {
   try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    }
+
     const { url, name } = await request.json();
 
     if (!url || !url.includes('airbnb.com')) {
-      return new Response(JSON.stringify({ error: 'Invalid Airbnb URL' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Invalid Airbnb URL' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Check if the user is at their 10 listing limit
+    const { count } = await supabase
+      .from('listings')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+
+    // If they already have 10 or more listings, check if they are UPDATING an existing one
+    if (count >= 10) {
+      const { data: existing } = await supabase
+        .from('listings')
+        .select('id')
+        .eq('airbnb_url', url)
+        .eq('user_id', user.id)
+        .single();
+        
+      if (!existing) {
+        return new Response(JSON.stringify({ error: 'Limit reached: You can only have 10 listings.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
     }
 
     // 1. Instantly Scrape Airbnb
@@ -35,22 +59,17 @@ export async function POST(request) {
     }
 
     // 2. Update Supabase
-    if (supabaseUrl && supabaseKey) {
-      const supabase = createClient(supabaseUrl, supabaseKey);
+    // Upsert by airbnb_url
+    const { error } = await supabase
+      .from('listings')
+      .upsert(
+        { airbnb_url: url, property_name: name || 'Unknown', rating, reviews_count, last_scraped_at: new Date(), user_id: user.id },
+        { onConflict: 'airbnb_url' }
+      );
       
-      // Upsert by airbnb_url
-      const { error } = await supabase
-        .from('listings')
-        .upsert(
-          { airbnb_url: url, property_name: name || 'Unknown', rating, reviews_count, last_scraped_at: new Date() },
-          { onConflict: 'airbnb_url' }
-        );
-        
-      if (error) {
-        console.error("Supabase upsert error:", error.message);
-      }
-    } else {
-      console.error("Missing Supabase credentials in Vercel.");
+    if (error) {
+      console.error("Supabase upsert error:", error.message);
+      return new Response(JSON.stringify({ error: 'Failed to save to database' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
     // 3. Return Instant Success
