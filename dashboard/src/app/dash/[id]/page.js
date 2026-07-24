@@ -139,6 +139,18 @@ export default function Dashboard(props) {
 
   return (
     <main style={{ padding: '40px', fontFamily: 'sans-serif', background: '#f7f7f7', minHeight: '100vh' }}>
+      <style>{`
+        ::placeholder {
+          color: #666 !important;
+          opacity: 1 !important;
+        }
+        :-ms-input-placeholder {
+          color: #666 !important;
+        }
+        ::-ms-input-placeholder {
+          color: #666 !important;
+        }
+      `}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
         <div>
           <h1 style={{ color: '#FF5A5F', margin: 0 }}>My Dashboard</h1>
@@ -153,6 +165,15 @@ export default function Dashboard(props) {
       </div>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '30px' }}>
+        {/* Column Headers */}
+        <div style={{ display: 'flex', gap: '20px', padding: '0 25px' }}>
+          <div style={{ flex: 2, display: 'flex', gap: '15px' }}>
+            <div style={{ flex: 1, fontWeight: 'bold', color: '#444', fontSize: '14px' }}>Property Name</div>
+            <div style={{ flex: 2, fontWeight: 'bold', color: '#444', fontSize: '14px' }}>Airbnb URL</div>
+          </div>
+          <div style={{ flex: 1, fontWeight: 'bold', color: '#444', fontSize: '14px', textAlign: 'center' }}>Live Preview</div>
+        </div>
+
         {rows.map((row, i) => (
           <div key={i} style={{ display: 'flex', gap: '20px', background: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', alignItems: 'center' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', flex: 2 }}>
@@ -160,7 +181,7 @@ export default function Dashboard(props) {
               <div style={{ display: 'flex', gap: '15px' }}>
                 <input 
                   type="text" 
-                  placeholder="Property Name (e.g., Cozy Cabin)" 
+                  placeholder="e.g. Cozy Cabin" 
                   value={row.name}
                   onChange={(e) => updateRow(i, 'name', e.target.value)}
                   onBlur={() => row.url && handleUrlSubmit(i)} 
@@ -168,7 +189,7 @@ export default function Dashboard(props) {
                 />
                 <input 
                   type="text" 
-                  placeholder="Paste Airbnb URL here..." 
+                  placeholder="https://www.airbnb.com/rooms/12345" 
                   value={row.url}
                   onChange={(e) => updateRow(i, 'url', e.target.value)}
                   onBlur={() => handleUrlSubmit(i)} 
