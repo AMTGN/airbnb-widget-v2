@@ -250,7 +250,7 @@ export default function Dashboard(props) {
               {row.saved && !row.loading ? (
                 <iframe src={getPreviewUrl(i)} width="100%" height="100%" frameBorder="0" scrolling="no" style={{ position: 'absolute', top: 0, left: 0 }}></iframe>
               ) : (
-                <span style={{ color: row.theme === 'dark' ? '#aaa' : '#999', fontSize: '14px' }}>Preview...</span>
+                <span style={{ color: row.theme === 'dark' ? '#666' : '#666', fontSize: '14px' }}>Preview...</span>
               )}
             </div>
           </div>
