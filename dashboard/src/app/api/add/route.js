@@ -1,25 +1,27 @@
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export async function POST(request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { url, name, userId } = await request.json();
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Missing Magic Link ID' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     }
-
-    const { url, name } = await request.json();
 
     if (!url || !url.includes('airbnb.com')) {
       return new Response(JSON.stringify({ error: 'Invalid Airbnb URL' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
     // Check if the user is at their 10 listing limit
     const { count } = await supabase
       .from('listings')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     // If they already have 10 or more listings, check if they are UPDATING an existing one
     if (count >= 10) {
@@ -27,11 +29,11 @@ export async function POST(request) {
         .from('listings')
         .select('id')
         .eq('airbnb_url', url)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .single();
         
       if (!existing) {
-        return new Response(JSON.stringify({ error: 'Limit reached: You can only have 10 listings.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Limit reached: You can only have 10 listings per Magic Link.' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
     }
 
@@ -58,12 +60,11 @@ export async function POST(request) {
       console.error("Direct fetch failed:", scrapeErr);
     }
 
-    // 2. Update Supabase
-    // Upsert by airbnb_url
+    // 2. Update Supabase using Service Role Key
     const { error } = await supabase
       .from('listings')
       .upsert(
-        { airbnb_url: url, property_name: name || 'Unknown', rating, reviews_count, last_scraped_at: new Date(), user_id: user.id },
+        { airbnb_url: url, property_name: name || 'Unknown', rating, reviews_count, last_scraped_at: new Date(), user_id: userId },
         { onConflict: 'airbnb_url' }
       );
       
