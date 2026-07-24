@@ -8,12 +8,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const airbnbUrl = searchParams.get('url');
+  const theme = searchParams.get('theme') || 'light';
 
   if (!airbnbUrl) {
     return new Response('Missing URL parameter', { status: 400 });
   }
 
-  // Default fallback data if Supabase isn't connected or listing isn't scraped yet
+  // Default fallback data
   let rating = '4.95';
   let reviews = '120';
 
@@ -30,10 +31,10 @@ export async function GET(request) {
       reviews = data.reviews_count;
     }
   } catch (err) {
-    console.error('Supabase fetch failed (expected if not set up yet):', err.message);
+    console.error('Supabase fetch failed:', err.message);
   }
 
-  const svg = getSvgTemplate(rating, reviews);
+  const svg = getSvgTemplate(rating, reviews, theme);
 
   return new Response(svg, {
     headers: {
@@ -43,15 +44,17 @@ export async function GET(request) {
   });
 }
 
-function getSvgTemplate(rating, reviews) {
+function getSvgTemplate(rating, reviews, theme) {
+  const textColor = theme === 'dark' ? '#ffffff' : '#222222';
+  
   return `
 <svg width="300" height="60" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <style>
       .text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-      .rating { font-size: 22px; font-weight: 600; fill: #222222; }
-      .reviews { font-size: 16px; fill: #222222; font-weight: 600; text-decoration: underline; }
-      .star { fill: #222222; }
+      .rating { font-size: 22px; font-weight: 600; fill: ${textColor}; }
+      .reviews { font-size: 16px; fill: ${textColor}; font-weight: 600; text-decoration: underline; }
+      .star { fill: ${textColor}; }
     </style>
   </defs>
   <rect width="100%" height="100%" fill="transparent" />
